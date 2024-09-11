@@ -11,7 +11,6 @@ import java.io.InputStream;
 @RequestMapping("/api/csv")
 public class CsvController {
 
-    private static final String[] filesNames = {"teams", "players", "matches", "records"};
     @Autowired
     private CsvParserService csvParserService;
 
