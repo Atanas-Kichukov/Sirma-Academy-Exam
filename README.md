@@ -1,7 +1,6 @@
 # Footbal Torunament API
 
 ### Description
-<<<<<<< HEAD
 
 Rest application that holds information about the matches, <br />their results and the teams with their players which
 have entered the European Championship.
