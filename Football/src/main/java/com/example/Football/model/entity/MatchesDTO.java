@@ -17,6 +17,7 @@ public class MatchesDTO extends BaseEntity {
     @Column(nullable = false)
     private LocalDate date;
     @Column(nullable = false)
+
     private String score;
 
     public MatchesDTO(TeamDTO ATeamId, TeamDTO BTeamId, LocalDate date, String score) {

@@ -1,56 +1,42 @@
 package com.example.Football.web;
 
 import com.example.Football.service.CsvParserService;
-
 import org.springframework.beans.factory.annotation.Autowired;
-
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
+import java.io.InputStream;
 
 @RestController
 @RequestMapping("/api/csv")
 public class CsvController {
+
+    private static final String[] filesNames = {"teams", "players", "matches", "records"};
     @Autowired
     private CsvParserService csvParserService;
 
-    @PostMapping("/uploadTeams")
-    public String uploadCsvTeams(@RequestParam("file") MultipartFile file) {
-        try {
-            csvParserService.loadTeamFromCsvFile(file.getInputStream());
-            return "CSV file processed successfully!";
-        } catch (Exception e) {
-            return "Error processing CSV file: " + e.getMessage();
-        }
-    }
-    @PostMapping("/uploadPlayers")
-    public String uploadCsvPlayers(@RequestParam("file") MultipartFile file) {
-        try {
-            csvParserService.loadPlayersFromCsvFile(file.getInputStream());
-            return "CSV file processed successfully!";
-        } catch (Exception e) {
-            return "Error processing CSV file: " + e.getMessage();
-        }
-    }
+    @PostMapping("/upload")
+    public String uploadCsvFiles(@RequestParam("file") MultipartFile[] files) {
 
-    @PostMapping("/uploadMatches")
-    public String uploadCsvMatches(@RequestParam("file") MultipartFile file) {
         try {
-            csvParserService.loadMatchesFromCsvFile(file.getInputStream());
-            return "CSV file processed successfully!";
+
+            for (int i = 0; i < files.length; i++) {
+                MultipartFile file = files[i];
+                InputStream inputStream = file.getInputStream();
+                String name = file.getOriginalFilename().substring(0, file.getOriginalFilename().lastIndexOf('.'));
+                if (name.equalsIgnoreCase("matches")) {
+                    csvParserService.loadMatchesFromCsvFile(inputStream);
+                } else if (name.equalsIgnoreCase("players")) {
+                    csvParserService.loadPlayersFromCsvFile(inputStream);
+                } else if (name.equalsIgnoreCase("records")) {
+                    csvParserService.loadRecordsFromCsvFile(inputStream);
+                } else if (name.equalsIgnoreCase("teams")) {
+                    csvParserService.loadTeamFromCsvFile(inputStream);
+                }
+            }
         } catch (Exception e) {
             return "Error processing CSV file: " + e.getMessage();
         }
-    }
-
-    @PostMapping("/uploadRecords")
-    public String uploadCsvRecords(@RequestParam("file") MultipartFile file) {
-        try {
-            csvParserService.loadRecordsFromCsvFile(file.getInputStream());
-            return "CSV file processed successfully!";
-        } catch (IOException e) {
-            return "Error processing CSV file: " + e.getMessage();
-        }
+        return "CSV file processed successfully!";
     }
 }

@@ -1,123 +1,104 @@
 package com.example.Football.service;
-
 import com.example.Football.model.entity.MatchesDTO;
 import com.example.Football.model.entity.PlayerDTO;
 import com.example.Football.model.entity.RecordsDto;
 import com.example.Football.model.entity.TeamDTO;
-import com.example.Football.model.view.PlayerPairDTO;
-import com.example.Football.model.view.PlayerPlaytimeDTO;
-import com.example.Football.repository.MatchesRepository;
 import com.example.Football.repository.PlayerRepository;
 import com.example.Football.repository.RecordsRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
-
 @Service
 public class PlayerPairService {
-    private static final Logger logger = LoggerFactory.getLogger(CsvParserService.class);
+
     @Autowired
     private RecordsRepository recordsRepository;
-    @Autowired
-    private MatchesRepository matchesRepository;
 
     @Autowired
     private PlayerRepository playerRepository;
 
-    public LinkedList<PlayerPlaytimeDTO> findPlayersWithLongestPlaytime() {
+    // method that gathers all the date from the other ones, like this I use the Single Responsibility Principle
+    public List<Map<String, Object>> findLongestPlayingPairsPerMatch() {
         List<RecordsDto> allRecords = recordsRepository.findAll();
 
-        Map<PlayerDTO, Integer> playerPlaytimeMap = new HashMap<>();
+        Map<MatchesDTO, Map<TeamDTO, List<RecordsDto>>> groupedRecords = groupRecordsByMatchAndTeam(allRecords);
 
-        for (RecordsDto record : allRecords) {
-            PlayerDTO player = record.getPlayerId();
-            int playtime = calculatePlaytimeForSinglePLayer(record.getFromMinutes(), record.getToMinutes());
-
-            playerPlaytimeMap.put(player, playerPlaytimeMap.getOrDefault(player, 0) + playtime);
-        }
-
-        // Find the players with the longest total playtime
-        int maxPlaytime = playerPlaytimeMap.values().stream().max(Integer::compare).orElse(0);
-
-        // Create a list of players with the maximum playtime
-        LinkedList<PlayerPlaytimeDTO> longestPlayingPlayers = new LinkedList<>()
-        for (Map.Entry<PlayerDTO, Integer> entry : playerPlaytimeMap.entrySet()) {
-            if (entry.getValue() == maxPlaytime) {
-                PlayerDTO player = entry.getKey();
-                int totalPlaytime = entry.getValue();
-                longestPlayingPlayers.add(new PlayerPlaytimeDTO(
-                        player.getId(),
-                        player.getFullName(),
-                        player.getTeamId().getName(),
-                        totalPlaytime
-                ));
-            }
-        }
-
-        return longestPlayingPlayers;
+        return getLongestPlayingPairsForAllMatches(groupedRecords);
     }
 
-    // Calculate the playtime for a single record
-    private int calculatePlaytimeForSinglePLayer(Integer fromMinutes, Integer toMinutes) {
-        if (toMinutes == null) toMinutes = 90; // Assume the player played until the end of the match
-        return Math.max(0, toMinutes - fromMinutes); // Return the total playtime
+    //First group the  records by match and by team
+    private Map<MatchesDTO, Map<TeamDTO, List<RecordsDto>>> groupRecordsByMatchAndTeam(List<RecordsDto> records) {
+        return records.stream()
+                .collect(Collectors.groupingBy(RecordsDto::getMatchId,
+                        Collectors.groupingBy(record -> record.getPlayerId().getTeamId())));
     }
 
-    public List<PlayerPairDTO> groupAllPlayersInPairsByMatchId() {
-        LinkedList<PlayerPlaytimeDTO> longestPlayingPlayers = this.findPlayersWithLongestPlaytime();
+    // Second find the longest playing pair
+    private List<Map<String, Object>> getLongestPlayingPairsForAllMatches(Map<MatchesDTO, Map<TeamDTO, List<RecordsDto>>> groupedRecords) {
+        List<Map<String, Object>> results = new ArrayList<>();
 
-        for (int i = 0; i < longestPlayingPlayers.size(); i++) {
-            PlayerPlaytimeDTO firstPlayerPlaytimeDTO = longestPlayingPlayers.get(i);
-            PlayerDTO firstPlayer = playerRepository.findById(firstPlayerPlaytimeDTO.getPlayerId()).orElse(null);
+        for (Map.Entry<MatchesDTO, Map<TeamDTO, List<RecordsDto>>> matchEntry : groupedRecords.entrySet()) {
+            MatchesDTO match = matchEntry.getKey();
+            Map<TeamDTO, List<RecordsDto>> teams = matchEntry.getValue();
 
-            for (int j = i + 1; j < longestPlayingPlayers.size() - 1; j++) {
-                PlayerPlaytimeDTO secondPlayerPlaytimeDTO = longestPlayingPlayers.get(i);
-                PlayerDTO secondPlayer = playerRepository.findById(firstPlayerPlaytimeDTO.getPlayerId()).orElse(null);
+            for (Map.Entry<TeamDTO, List<RecordsDto>> teamEntry : teams.entrySet()) {
+                TeamDTO team = teamEntry.getKey();
+                List<RecordsDto> teamRecords = teamEntry.getValue();
 
-                if(firstPlayer.getTeamId().getName().equals(secondPlayer.getTeamId().getId())){
-
+                Map<String, Object> matchResult = findLongestPlayingPairInTeam(match, team, teamRecords);
+                if (matchResult != null) {
+                    results.add(matchResult);
                 }
             }
-
         }
-        Map<Long, List<Long>> playerIdWithMatchId = new HashMap<>();
+        return results;
+    }
 
-        for (PlayerPlaytimeDTO player : longestPlayingPlayers) {
-            Long playerId = player.getPlayerId();
-            PlayerDTO playerDTO = playerRepository.findById(playerId).orElse(null);
-            List<RecordsDto> playersRecords = recordsRepository.findByPlayerId(playerDTO);
+    // Third Find the longest-playing pair in a team for a match
+    private Map<String, Object> findLongestPlayingPairInTeam(MatchesDTO match, TeamDTO team, List<RecordsDto> teamRecords) {
+        PlayerDTO firstPlayer = null;
+        PlayerDTO secondPlayer = null;
+        int maxOverlapTime = 0;
 
+        for (int i = 0; i < teamRecords.size(); i++) {
+            for (int j = i + 1; j < teamRecords.size(); j++) {
+                RecordsDto firstRecord = teamRecords.get(i);
+                RecordsDto secondRecord = teamRecords.get(j);
 
-            for (RecordsDto record : playersRecords) {
-                if(!playerIdWithMatchId.containsKey(playerId)){
-                    playerIdWithMatchId.put(playerId,new ArrayList<>());
-                }else{
-                    List<Long> matchesIds = playerIdWithMatchId.get(playerId);
-                    matchesIds.add(record.getMatchId().getId());
-                    playerIdWithMatchId.put(playerId,matchesIds);
+                Integer overlapTime = calculateOverlapTime(
+                        firstRecord.getFromMinutes(), firstRecord.getToMinutes(),
+                        secondRecord.getFromMinutes(), secondRecord.getToMinutes());
+
+                if (overlapTime > maxOverlapTime) {
+                    maxOverlapTime = overlapTime;
+                    firstPlayer = playerRepository.findById(firstRecord.getPlayerId().getId()).orElse(null);
+                    secondPlayer = playerRepository.findById(secondRecord.getPlayerId().getId()).orElse(null);
                 }
-
-                logger.info("Player id {}---Matches {}",playerId,
-
-
-                        playerIdWithMatchId.get(playerId).toString());
-
             }
-
-        }
-        //-- change from here
-        List<PlayerPairDTO> pairs = new ArrayList<>();
-        for (Map.Entry<Long, List<Long>> entry : playerIdWithMatchId.entrySet()) {
-
         }
 
+
+
+        if (firstPlayer != null && secondPlayer != null) {
+            Map<String, Object> matchResult = new HashMap<>();
+            matchResult.put("teamName", team.getName());
+            matchResult.put("matchId", match.getId());
+            matchResult.put("firstPlayer", firstPlayer.getFullName());
+            matchResult.put("secondPlayer", secondPlayer.getFullName());
+            matchResult.put("overlapTime", maxOverlapTime);
+            return matchResult;
+        }
         return null;
     }
 
 
-
+    private int calculateOverlapTime(Integer from1, Integer to1, Integer from2, Integer to2) {
+        int overlapStart = Math.max(from1, from2);
+        if (to1 == null) to1 = 90;
+        if (to2 == null) to2 = 90;
+        int overlapEnd = Math.min(to1, to2);
+        return Math.max(0, overlapEnd - overlapStart);
+    }
 }
