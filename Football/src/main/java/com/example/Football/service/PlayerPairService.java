@@ -96,8 +96,8 @@ public class PlayerPairService {
 
     private int calculateOverlapTime(Integer from1, Integer to1, Integer from2, Integer to2) {
         int overlapStart = Math.max(from1, from2);
-        if (to1 == null) to1 = 90;
-        if (to2 == null) to2 = 90;
+        if (to1 == null) {to1 = 90;}
+        if (to2 == null) {to2 = 90;}
         int overlapEnd = Math.min(to1, to2);
         return Math.max(0, overlapEnd - overlapStart);
     }
